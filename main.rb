@@ -1,13 +1,7 @@
-class Connection
-  def send_message(target, message)
-    target.receive(message)
-  end
-end
-
 class PaxosCluster
   attr_reader :nodes
 
-  def initialize
+  def initialize()
     @nodes = []
   end
 
@@ -21,23 +15,37 @@ class PaxosCluster
   end
 
   def read
+    # read synchronously
     @nodes.sample.read # any node could get a read request. data isn't guaranteed to be up-to-date
   end
 end
 
-class Message
-  attr_reader :sender, :payload
-  def initialize(sender, payload)
-    @sender = sender
-    @payload = payload
+class Network
+  def initialize
+    @queue = []
+  end
+
+  def send_message(target, message)
+    sleep(rand)
+    @queue.push([target, message])
+    if rand(10) > 5
+      @queue.shuffle!
+      process_queue # only send messages occasionally
+    end
+  end
+
+  def process_queue
+    @queue.each do |e|
+      e[0].receive(e[1])
+    end
   end
 end
 
 class PaxosNode
   attr_accessor :highest_sequence_number
 
-  def initialize(cluster)
-    @connection = Connection.new
+  def initialize(cluster, network)
+    @network = network
     @highest_sequence_number = 0
     @last_agreed_value = nil
     @cluster = cluster
@@ -54,11 +62,17 @@ class PaxosNode
 
     case message[:type]
     when "prepare"
-      return if proposer?
       return if message[:sequence_number] <= highest_sequence_number
+      @highest_sequence_number = message[:sequence_number]
+
+      if proposer?
+        # escalate proposal, since someone's trying to propose a higher sequence than yours
+        puts "escalating!"
+        write(@value)
+      end
 
       @highest_sequence_number = message[:sequence_number]
-      send_message(message[:sender], new_message('promise')) # TODO: send last receieved value?
+      send_message(message[:sender], new_message('promise')) # TODO: send last received value?
 
     when "promise"
       return unless proposer?
@@ -70,8 +84,9 @@ class PaxosNode
         other_nodes.each do |node|
           send_message(node, new_message('commit', value: @value, sequence_number: @proposed_sequence_number))
         end
-        @log.push(message[:value])
+        @log.push(@value)
 
+        # give up proposer status
         @is_proposer = false # TODO: extract
         @promises_received = 0
       end
@@ -88,7 +103,9 @@ class PaxosNode
   end
 
   def send_message(target, message)
-    @connection.send_message(target, message)
+
+    puts "#{self.to_s} #{self.proposer? ? '(proposer)' : '(acceptor)' } sent #{message[:type]} with seq #{message[:sequence_number]}"
+    @network.send_message(target, message)
   end
 
   def read
@@ -124,10 +141,21 @@ class PaxosNode
 
 end
 
-def build_cluster
+
+def build_cluster(network)
   cluster = PaxosCluster.new
   3.times do
-    PaxosNode.new(cluster)
+    PaxosNode.new(cluster, network)
   end
   cluster
 end
+
+network = Network.new
+c = build_cluster(network)
+puts "Writing 1..."
+c.write 1
+puts "Writing 2..."
+c.write 2
+network.process_queue # flush queue
+puts c.read.inspect
+
