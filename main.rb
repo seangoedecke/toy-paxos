@@ -3,8 +3,9 @@ require_relative './cluster'
 require_relative './network'
 
 # Sets up a cluster with three nodes on an unreliable network and makes a write
-# NB: Paxos only comes to consensus on one decision. You need something else tracking round numbers to get you to
-# multiple decisions or a unified log
+# NB: Paxos only comes to consensus on _one_ decision. You need something else tracking round numbers to get you to
+# multiple decisions or a unified log. That's why "Multi-Paxos" has "multi" in the name - because it gives you 
+# multiple rounds
 
 DROP_CHANCE = 0
 SHUFFLE_CHANCE = 2
