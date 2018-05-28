@@ -15,6 +15,6 @@ class Message
     @sender = sender
   end
   def to_s
-    "#{@type} message: seq #{@sequence_number}, value: #{@value}"
+    "#{@type} message (#{@sequence_number})#{@value ? " with value: #{value}" : ''}"
   end
 end
